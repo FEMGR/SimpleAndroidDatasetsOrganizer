@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">Datasets Creator and Organizer</string>
+
+    <!-- UI Elements -->
+    <string name="title_main">Datasets Creator and Organizer</string>
+    <string name="btn_take_picture">Take Picture</string>
+    <string name="btn_split_data">Split Dataset (&gt;200 items)</string>
+
+    <!-- Dialog Texts -->
+    <string name="dialog_title_label">Select Labeled Directory</string>
+    <string name="dialog_message_label">Create a new label or choose an existing one to save inside the test folder.</string>
+    <string name="hint_enter_label">Enter label (e.g., cat, dog)</string>
+    <string name="dialog_btn_capture">Capture</string>
+    <string name="dialog_btn_cancel">Cancel</string>
+
+    <!-- Toast Messages -->
+    <string name="toast_capture_cancelled">Capture cancelled</string>
+    <string name="toast_split_complete">Dataset split complete!</string>
+    <string name="toast_label_empty">Label cannot be empty</string>
+    <string name="toast_saved_image">Saved: %1$s in /test/%2$s</string>
+    <string name="toast_save_failed">Failed to save image</string>
+    <string name="delete_selected">Delete Selected</string>
+</resources>

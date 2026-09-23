@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.DatasetsCreatorAndOrganizer" parent="Theme.Material3.DayNight.NoActionBar">
+
+        <!-- ========================================================
+             Brand
+             ======================================================== -->
+
+        <item name="colorPrimary">@color/forest_primary</item>
+        <item name="colorOnPrimary">@color/forest_white</item>
+
+        <item name="colorPrimaryContainer">@color/forest_primary_light</item>
+        <item name="colorOnPrimaryContainer">@color/forest_text</item>
+
+
+        <!-- ========================================================
+             Secondary
+             ======================================================== -->
+
+        <item name="colorSecondary">@color/forest_secondary</item>
+        <item name="colorOnSecondary">@color/forest_white</item>
+
+        <item name="colorSecondaryContainer">
+            @color/forest_secondary_light
+        </item>
+
+        <item name="colorOnSecondaryContainer">
+            @color/forest_text
+        </item>
+
+
+        <!-- ========================================================
+             Tertiary / Accent
+             ======================================================== -->
+
+        <item name="colorTertiary">@color/forest_accent</item>
+        <item name="colorOnTertiary">@color/forest_text</item>
+
+
+        <!-- ========================================================
+             Background
+             ======================================================== -->
+
+        <item name="android:colorBackground">
+            @color/forest_background
+        </item>
+
+        <item name="colorSurface">
+            @color/forest_surface
+        </item>
+
+        <item name="colorOnSurface">
+            @color/forest_text
+        </item>
+
+
+        <!-- ========================================================
+             Error
+             ======================================================== -->
+
+        <item name="colorError">@color/status_error</item>
+        <item name="colorOnError">@color/forest_white</item>
+
+
+        <!-- ========================================================
+             Android system
+             ======================================================== -->
+
+        <item name="android:statusBarColor">
+            @color/forest_primary_dark
+        </item>
+
+        <item name="android:navigationBarColor">
+            @color/forest_background
+        </item>
+
+        <item name="android:windowLightStatusBar">false</item>
+
+    </style>
+
+</resources>

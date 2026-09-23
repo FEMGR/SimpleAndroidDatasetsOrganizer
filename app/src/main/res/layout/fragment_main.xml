@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="@color/forest_warm">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:layout_marginBottom="32dp"
+        android:text="@string/title_main"
+        android:textAlignment="center"
+        android:textColor="@color/forest_text"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_take_picture"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="@string/btn_take_picture"
+        android:textColor="@color/forest_text_inverse"
+        app:backgroundTint="@color/forest_secondary"
+        app:cornerRadius="12dp"
+        android:layout_marginBottom="16dp"/>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_view_dataset"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="View Saved Datasets"
+        android:textColor="@color/forest_text_inverse"
+        app:backgroundTint="@color/forest_primary"
+        app:cornerRadius="12dp"
+        android:layout_marginBottom="16dp"/>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_split_data"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:text="@string/btn_split_data"
+        android:textColor="@color/forest_text_inverse"
+        app:backgroundTint="@color/forest_primary_dark"
+        app:cornerRadius="12dp" />
+
+</LinearLayout>

@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- ============================================================
+         SOFT FOREST PALETTE
+         Smart Urban Farming
+         ============================================================ -->
+
+    <!-- Brand / Primary -->
+    <color name="forest_primary">#4F7C59</color>
+    <color name="forest_primary_dark">#355B3F</color>
+    <color name="forest_primary_light">#DDE9DE</color>
+
+    <!-- Supporting Forest -->
+    <color name="forest_secondary">#6F8F72</color>
+    <color name="forest_secondary_light">#E4EDE4</color>
+
+    <!-- Accent / Sage -->
+    <color name="forest_accent">#8FAF96</color>
+    <color name="forest_accent_light">#EAF1EA</color>
+
+    <!-- ============================================================
+         Backgrounds / Surfaces
+         ============================================================ -->
+
+    <color name="forest_background">#E8EFE7</color>
+    <color name="forest_surface">#F1F5F0</color>
+    <color name="forest_warm">#F7F9F6</color>
+    <color name="forest_white">#FFFFFF</color>
+
+    <!-- ============================================================
+         Borders
+         ============================================================ -->
+
+    <color name="forest_border">#9D8F23</color>
+    <color name="forest_border_strong">#71321E</color>
+
+    <!-- ============================================================
+         Typography
+         ============================================================ -->
+
+    <color name="forest_text">#203027</color>
+    <color name="forest_text_muted">#59685D</color>
+    <color name="forest_text_muted_light">#718075</color>
+    <color name="forest_text_inverse">#FFFFFF</color>
+
+    <!-- ============================================================
+         Status
+         ============================================================ -->
+
+    <!-- Success -->
+    <color name="status_success">#4F7C59</color>
+    <color name="status_success_background">#DDE9DE</color>
+
+    <!-- Warning -->
+    <color name="status_warning">#B8924A</color>
+    <color name="status_warning_background">#F2E8D0</color>
+
+    <!-- Error -->
+    <color name="status_error">#B85C50</color>
+    <color name="status_error_background">#F2DDDA</color>
+
+    <!-- Information -->
+    <color name="status_info">#648E91</color>
+    <color name="status_info_background">#DDE9E8</color>
+
+    <!-- ============================================================
+         Smart Farming Domain Colours
+         ============================================================ -->
+
+    <!-- Water / Irrigation -->
+    <color name="care_water">#648E91</color>
+
+    <!-- Fertilizing / Soil -->
+    <color name="care_fertilize">#6F8F72</color>
+
+    <!-- Pruning / Maintenance -->
+    <color name="care_prune">#7C8F78</color>
+
+    <!-- Harvest -->
+    <color name="care_harvest">#8A9560</color>
+
+</resources>
