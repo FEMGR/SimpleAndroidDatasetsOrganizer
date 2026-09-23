@@ -14,14 +14,6 @@ This app lets you pick a target folder, capture photos with labels, and store th
 - Rename or delete files and folders directly from the device
 - Works with labeled image collection for computer vision or ML experimentation
 
-## Why this app?
-
-Collecting and organizing image datasets on a phone is often tedious and error-prone. This project simplifies that process by:
-
-- keeping all files in a consistent folder layout
-- enforcing label-based directories
-- reducing manual naming work
-- helping prepare dataset splits for training workflows
 
 ## App workflow
 
