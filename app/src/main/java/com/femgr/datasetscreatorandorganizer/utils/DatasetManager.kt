@@ -6,9 +6,9 @@ import androidx.documentfile.provider.DocumentFile
 
 object DatasetManager {
 
-    private const val FOLDER_TRAIN = "train"
-    private const val FOLDER_TEST = "test"
-    private const val FOLDER_VALIDATION = "validation"
+    const val FOLDER_TRAIN = "train"
+    const val FOLDER_TEST = "test"
+    const val FOLDER_VALIDATION = "validation"
 
     fun initializeBaseFolders(context: Context, baseDirUri: Uri) {
         val rootDir = DocumentFile.fromTreeUri(context, baseDirUri) ?: return
@@ -19,6 +19,37 @@ object DatasetManager {
                 rootDir.createDirectory(folderName)
             }
         }
+    }
+
+    /**
+     * Scans for labeled folders in train, test, and validation directories.
+     */
+    fun getExistingLabels(context: Context, baseDirUri: Uri): List<String> {
+        val rootDir = DocumentFile.fromTreeUri(context, baseDirUri) ?: return emptyList()
+        val labels = mutableSetOf<String>()
+        
+        listOf(FOLDER_TRAIN, FOLDER_TEST, FOLDER_VALIDATION).forEach { folderName ->
+            val parentDir = rootDir.findFile(folderName)
+            parentDir?.listFiles()?.forEach { file ->
+                if (file.isDirectory && !file.name.isNullOrEmpty()) {
+                    labels.add(file.name!!)
+                }
+            }
+        }
+        
+        // Also check if the root itself has folders that aren't the base ones
+        rootDir.listFiles().forEach { file ->
+            if (file.isDirectory && 
+                file.name != FOLDER_TRAIN && 
+                file.name != FOLDER_TEST && 
+                file.name != FOLDER_VALIDATION) {
+                if (!file.name.isNullOrEmpty()) {
+                    labels.add(file.name!!)
+                }
+            }
+        }
+
+        return labels.toList().sorted()
     }
 
     fun getLabelDirectory(context: Context, baseDirUri: Uri, parentFolder: String, label: String): DocumentFile {
@@ -57,55 +88,73 @@ object DatasetManager {
         return labelDir.createFile(mimeType, nextFileName)!!
     }
 
-    fun divideDataset(context: Context, baseDirUri: Uri) {
+    /**
+     * Splits data from the landing zone (now train folder) into test and validation.
+     * Accounts for existing files in all folders to maintain requested proportions.
+     */
+    fun divideDataset(
+        context: Context,
+        baseDirUri: Uri,
+        labelsToSplit: Set<String>,
+        trainPercent: Int,
+        valPercent: Int,
+        testPercent: Int
+    ) {
         val rootDir = DocumentFile.fromTreeUri(context, baseDirUri) ?: return
-        val testDir = rootDir.findFile(FOLDER_TEST) ?: return
+        val trainDir = rootDir.findFile(FOLDER_TRAIN) ?: return
 
-        val labelDirs = testDir.listFiles().filter { it.isDirectory }
+        for (labelName in labelsToSplit) {
+            val labelDirInLanding = trainDir.findFile(labelName) ?: continue
+            if (!labelDirInLanding.isDirectory) continue
 
-        for (labelDir in labelDirs) {
-            val images = labelDir.listFiles().filter { it.isFile && !it.name.isNullOrEmpty() }.sortedBy { it.name }
+            val valLabelDir = getLabelDirectory(context, baseDirUri, FOLDER_VALIDATION, labelName)
+            val testLabelDir = getLabelDirectory(context, baseDirUri, FOLDER_TEST, labelName)
 
-            if (images.size > 200) {
-                val label = labelDir.name ?: continue
+            // Count existing files in each destination folder to account for them in the ratio
+            val currentLandingFiles = labelDirInLanding.listFiles().filter { it.isFile }.sortedBy { it.name }
+            val currentValCount = valLabelDir.listFiles().count { it.isFile }
+            val currentTestCount = testLabelDir.listFiles().count { it.isFile }
+            val currentTrainCount = currentLandingFiles.size
 
-                val trainCount = (images.size * 0.70).toInt()
-                val valCount = (images.size * 0.15).toInt()
+            val totalImages = currentTrainCount + currentValCount + currentTestCount
+            if (totalImages == 0) continue
 
-                val trainLabelDir = getLabelDirectory(context, baseDirUri, FOLDER_TRAIN, label)
-                val valLabelDir = getLabelDirectory(context, baseDirUri, FOLDER_VALIDATION, label)
+            // Determine target counts based on the user-specified percentages
+            val targetVal = (totalImages * (valPercent / 100f)).toInt()
+            val targetTest = (totalImages * (testPercent / 100f)).toInt()
+            // Train count is essentially the remainder
 
-                // Move first chunk to Train
-                for (i in 0 until trainCount) {
-                    val fileToMove = images[i]
-                    val extension = fileToMove.name?.substringAfterLast('.', "jpg") ?: "jpg"
-                    val mimeType = fileToMove.type ?: "image/jpeg"
-
-                    val destFile = getNextFile(context, trainLabelDir, extension, mimeType)
-                    moveDocumentFile(context, fileToMove, destFile)
+            // 1. Move from Train (Landing Zone) to Validation if needed
+            if (currentValCount < targetVal) {
+                val moveCount = (targetVal - currentValCount).coerceAtMost(currentLandingFiles.size)
+                currentLandingFiles.take(moveCount).forEach { file ->
+                    moveDocumentFile(context, file, valLabelDir)
                 }
+            }
 
-                // Move second chunk to Validation
-                for (i in trainCount until (trainCount + valCount)) {
-                    val fileToMove = images[i]
-                    val extension = fileToMove.name?.substringAfterLast('.', "jpg") ?: "jpg"
-                    val mimeType = fileToMove.type ?: "image/jpeg"
-
-                    val destFile = getNextFile(context, valLabelDir, extension, mimeType)
-                    moveDocumentFile(context, fileToMove, destFile)
+            // 2. Move from Train (Landing Zone) to Test if needed
+            // Re-fetch remaining files in the landing folder after moves to validation
+            val remainingLandingFiles = labelDirInLanding.listFiles().filter { it.isFile }.sortedBy { it.name }
+            if (currentTestCount < targetTest) {
+                val moveCount = (targetTest - currentTestCount).coerceAtMost(remainingLandingFiles.size)
+                remainingLandingFiles.take(moveCount).forEach { file ->
+                    moveDocumentFile(context, file, testLabelDir)
                 }
             }
         }
     }
 
-    // Helper method to simulate file moving under Scoped Storage streams
-    private fun moveDocumentFile(context: Context, source: DocumentFile, dest: DocumentFile) {
+    private fun moveDocumentFile(context: Context, source: DocumentFile, destDir: DocumentFile) {
         try {
+            val extension = source.name?.substringAfterLast('.', "jpg") ?: "jpg"
+            val mimeType = source.type ?: "image/jpeg"
+            val destFile = getNextFile(context, destDir, extension, mimeType)
+
             context.contentResolver.openInputStream(source.uri).use { input ->
-                context.contentResolver.openOutputStream(dest.uri).use { output ->
+                context.contentResolver.openOutputStream(destFile.uri).use { output ->
                     if (input != null && output != null) {
                         input.copyTo(output)
-                        source.delete() // Delete original test directory item after clean copying
+                        source.delete()
                     }
                 }
             }

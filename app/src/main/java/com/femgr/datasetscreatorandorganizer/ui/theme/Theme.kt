@@ -155,7 +155,7 @@ private val DarkColorScheme = darkColorScheme(
 // ============================================================================
 
 @Composable
-fun SmartUrbanFarmingTheme(
+fun ForestTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {

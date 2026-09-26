@@ -4,292 +4,335 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.View
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.CheckBox
-import android.widget.ImageView
-import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.OnBackPressedCallback
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.documentfile.provider.DocumentFile
-import androidx.recyclerview.widget.GridLayoutManager
-import androidx.recyclerview.widget.RecyclerView
+import com.femgr.datasetscreatorandorganizer.ui.theme.ForestTheme
 
-class DatasetViewerActivity : AppCompatActivity() {
-
-    private lateinit var recyclerView: RecyclerView
-    private lateinit var tvPath: TextView
-
-    // Ensure "private" is separated and spelled correctly here:
-    private lateinit var btnDeleteSelected: com.google.android.material.floatingactionbutton.FloatingActionButton
-
-    private var baseDirectory: DocumentFile? = null
-    private var currentDirectory: DocumentFile? = null
-
-    // State trackers for multi-selection mode
-    private var isSelectionMode = false
-    private val selectedFiles = HashSet<DocumentFile>()
-    private var fileAdapter: FileAdapter? = null
+class DatasetViewerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_dataset_viewer)
 
-        recyclerView = findViewById(R.id.recycler_view_files)
-        tvPath = findViewById(R.id.tv_current_path)
-        btnDeleteSelected = findViewById(R.id.btn_delete_selected)
-
-        btnDeleteSelected.setOnClickListener {
-            showBulkDeleteConfirmationDialog()
-        }
         val savedUriStr = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
             .getString("base_folder_uri", null)
 
-        if (savedUriStr != null) {
-            val baseUri = Uri.parse(savedUriStr)
-            baseDirectory = DocumentFile.fromTreeUri(this, baseUri)
-
-            if (baseDirectory != null) {
-                openDirectory(baseDirectory!!)
-            } else {
-                Toast.makeText(this, "Unable to access directory", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-        } else {
+        if (savedUriStr == null) {
             Toast.makeText(this, "Select a folder first.", Toast.LENGTH_SHORT).show()
             finish()
+            return
         }
 
-        // Handle delete selected button click
-        btnDeleteSelected.setOnClickListener {
-            showBulkDeleteConfirmationDialog()
+        val baseUri = Uri.parse(savedUriStr)
+        val rootDoc = DocumentFile.fromTreeUri(this, baseUri)
+
+        if (rootDoc == null) {
+            Toast.makeText(this, "Unable to access directory", Toast.LENGTH_SHORT).show()
+            finish()
+            return
         }
 
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                // If selection mode is active, back press cancels it instead of navigating away
-                if (isSelectionMode) {
-                    exitSelectionMode()
-                } else if (currentDirectory != null && baseDirectory != null && currentDirectory!!.uri != baseDirectory!!.uri) {
-                    currentDirectory!!.parentFile?.let { openDirectory(it) }
-                } else {
-                    isEnabled = false
-                    onBackPressedDispatcher.onBackPressed()
+        setContent {
+            ForestTheme {
+                DatasetViewerScreen(rootDoc)
+            }
+        }
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    fun DatasetViewerScreen(rootDirectory: DocumentFile) {
+        val context = LocalContext.current
+        var currentDirectory by remember { mutableStateOf(rootDirectory) }
+        var refreshTrigger by remember { mutableStateOf(0) }
+        
+        val files = remember(currentDirectory, refreshTrigger) {
+            currentDirectory.listFiles()
+                .sortedWith(compareBy({ !it.isDirectory }, { it.name }))
+        }
+
+        var isSelectionMode by remember { mutableStateOf(false) }
+        val selectedFiles = remember { mutableStateListOf<DocumentFile>() }
+
+        // Back navigation
+        BackHandler(enabled = isSelectionMode || currentDirectory.uri != rootDirectory.uri) {
+            if (isSelectionMode) {
+                isSelectionMode = false
+                selectedFiles.clear()
+            } else {
+                currentDirectory.parentFile?.let { currentDirectory = it }
+            }
+        }
+
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Text(
+                            text = currentDirectory.name ?: "ML_Datasets",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    actions = {
+                        if (isSelectionMode) {
+                            IconButton(onClick = { 
+                                showBulkDeleteConfirmation(selectedFiles) {
+                                    isSelectionMode = false
+                                    selectedFiles.clear()
+                                    refreshTrigger++
+                                }
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { padding ->
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(10.dp),
+                modifier = Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+            ) {
+                items(files) { file ->
+                    val isSelected = selectedFiles.contains(file)
+                    FileItem(
+                        file = file,
+                        isSelectionMode = isSelectionMode,
+                        isSelected = isSelected,
+                        onClick = {
+                            if (isSelectionMode) {
+                                if (isSelected) selectedFiles.remove(file) else selectedFiles.add(file)
+                                if (selectedFiles.isEmpty()) isSelectionMode = false
+                            } else {
+                                if (file.isDirectory) {
+                                    currentDirectory = file
+                                }
+                            }
+                        },
+                        onLongClick = {
+                            if (!isSelectionMode) {
+                                showSingleOptionsDialog(file, 
+                                    onRename = { refreshTrigger++ },
+                                    onDelete = { refreshTrigger++ },
+                                    onEnterSelection = {
+                                        isSelectionMode = true
+                                        selectedFiles.add(file)
+                                    }
+                                )
+                            }
+                        }
+                    )
                 }
             }
-        })
+        }
     }
 
-    private fun openDirectory(directory: DocumentFile) {
-        currentDirectory = directory
-        tvPath.text = directory.name ?: "ML_Datasets"
-        exitSelectionMode() // Reset selections when moving into another directory
-
-        val filesAndFolders = directory.listFiles()
-            .sortedWith(compareBy({ !it.isDirectory }, { it.name }))
-
-        recyclerView.layoutManager = GridLayoutManager(this, 2)
-
-        fileAdapter = FileAdapter(filesAndFolders)
-        recyclerView.adapter = fileAdapter
-    }
-
-    private fun exitSelectionMode() {
-        isSelectionMode = false
-        selectedFiles.clear()
-        btnDeleteSelected.visibility = View.GONE
-        fileAdapter?.notifyDataSetChanged()
-    }
-
-    private fun showBulkDeleteConfirmationDialog() {
-        if (selectedFiles.isEmpty()) return
-
-        AlertDialog.Builder(this)
-            .setTitle("Delete Multiple Items")
-            .setMessage("Are you sure you want to delete the ${selectedFiles.size} selected items?")
-            .setPositiveButton("Delete") { _, _ ->
-                var successCount = 0
-                for (file in selectedFiles) {
-                    if (file.delete()) {
-                        successCount++
+    @OptIn(ExperimentalFoundationApi::class)
+    @Composable
+    fun FileItem(
+        file: DocumentFile, 
+        isSelectionMode: Boolean, 
+        isSelected: Boolean,
+        onClick: () -> Unit,
+        onLongClick: () -> Unit
+    ) {
+        val context = LocalContext.current
+        Card(
+            modifier = Modifier
+                .padding(6.dp)
+                .fillMaxWidth()
+                .height(180.dp)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = onLongClick
+                ),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                    ) {
+                        if (file.isDirectory) {
+                            Image(
+                                painter = painterResource(id = android.R.drawable.ic_menu_gallery),
+                                contentDescription = "Folder",
+                                modifier = Modifier.size(48.dp).align(Alignment.Center),
+                                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)
+                            )
+                        } else {
+                            val bitmap = remember(file.uri) {
+                                try {
+                                    context.contentResolver.openInputStream(file.uri)?.use { 
+                                        BitmapFactory.decodeStream(it)
+                                    }
+                                } catch (e: Exception) { null }
+                            }
+                            if (bitmap != null) {
+                                Image(
+                                    bitmap = bitmap.asImageBitmap(),
+                                    contentDescription = "Thumbnail",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Image(
+                                    painter = painterResource(id = android.R.drawable.ic_menu_report_image),
+                                    contentDescription = "Error",
+                                    modifier = Modifier.size(48.dp).align(Alignment.Center),
+                                    colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.error)
+                                )
+                            }
+                        }
                     }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = file.name ?: "",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        ),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    val subtext = if (file.isDirectory) {
+                        val count = file.listFiles().size
+                        "$count items"
+                    } else {
+                        "${file.length() / 1024} KB"
+                    }
+
+                    Text(
+                        text = subtext,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    )
                 }
-                Toast.makeText(this, "Successfully deleted $successCount items", Toast.LENGTH_SHORT).show()
-                currentDirectory?.let { openDirectory(it) } // Refresh view
+
+                if (isSelectionMode) {
+                    Icon(
+                        imageVector = if (isSelected) Icons.Default.CheckCircle else Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(8.dp)
+                    )
+                }
             }
-            .setNegativeButton("Cancel", null)
-            .show()
+        }
     }
 
-    // Handles single item long-press options (Rename/Delete single)
-    // 1. Shows a menu when an individual file/folder is long-pressed
-    // 1. Shows a menu when an individual file/folder is long-pressed
-    private fun showSingleOptionsDialog(file: DocumentFile, position: Int) {
+    private fun showSingleOptionsDialog(
+        file: DocumentFile, 
+        onRename: () -> Unit, 
+        onDelete: () -> Unit,
+        onEnterSelection: () -> Unit
+    ) {
         val options = arrayOf("Rename", "Delete Item", "Select Multiple Items")
-
         AlertDialog.Builder(this)
             .setTitle(file.name ?: "Options")
             .setItems(options) { _, which ->
                 when (which) {
-                    0 -> showRenameDialog(file) // User chose Rename
-                    1 -> { // User chose Delete Single Item
+                    0 -> showRenameDialog(file, onRename)
+                    1 -> {
                         if (file.delete()) {
-                            Toast.makeText(this, "Item deleted", Toast.LENGTH_SHORT).show()
-                            currentDirectory?.let { openDirectory(it) } // Refresh layout grid
-                        } else {
-                            Toast.makeText(this, "Failed to delete item", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, "Deleted", Toast.LENGTH_SHORT).show()
+                            onDelete()
                         }
                     }
-                    2 -> { // Fixed from 3 to 2! User chose Select Multiple Items
-                        isSelectionMode = true
-                        btnDeleteSelected.visibility = View.VISIBLE
-                        fileAdapter?.toggleSelection(file, position)
-                        fileAdapter?.notifyDataSetChanged() // Show checkboxes across items
-                    }
+                    2 -> onEnterSelection()
                 }
             }
             .show()
     }
 
-    // 2. Displays the input text field and executes the rename action safely
-    private fun showRenameDialog(file: DocumentFile) {
+    private fun showRenameDialog(file: DocumentFile, onRename: () -> Unit) {
         val input = android.widget.EditText(this)
         val originalName = file.name ?: ""
-
         input.setText(originalName)
-        input.setSelection(input.text.length) // Moves cursor focus cleanly to the end
+        input.setSelection(input.text.length)
 
         AlertDialog.Builder(this)
             .setTitle("Rename Item")
             .setView(input)
             .setPositiveButton("Save") { _, _ ->
                 val newName = input.text.toString().trim()
-
-                if (newName.isEmpty()) {
-                    Toast.makeText(this, "Name cannot be empty", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-
-                if (newName == originalName) return@setPositiveButton // No changes made
-
-                // Check if extension was accidentally wiped on file objects
-                if (file.isFile && !newName.contains(".")) {
-                    val originalExtension = originalName.substringAfterLast('.', "")
-                    if (originalExtension.isNotEmpty()) {
-                        Toast.makeText(this, "Warning: Keep the file extension (.${originalExtension})", Toast.LENGTH_LONG).show()
-                        return@setPositiveButton
+                if (newName.isNotEmpty() && newName != originalName) {
+                    if (file.renameTo(newName)) {
+                        onRename()
+                    } else {
+                        Toast.makeText(this, "Rename failed", Toast.LENGTH_SHORT).show()
                     }
-                }
-
-                // DocumentFile natively changes names safely under Scoped Storage limits
-                val success = file.renameTo(newName)
-                if (success) {
-                    Toast.makeText(this, "Renamed successfully", Toast.LENGTH_SHORT).show()
-                    currentDirectory?.let { openDirectory(it) } // Refresh layout grid
-                } else {
-                    Toast.makeText(this, "Rename failed. File might already exist.", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("Cancel", null)
             .show()
     }
 
-
-    // --- RECYCLERVIEW ADAPTER ---
-    inner class FileAdapter(private val files: List<DocumentFile>) :
-        RecyclerView.Adapter<FileAdapter.FileViewHolder>() {
-
-        inner class FileViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val imgThumbnail: ImageView = view.findViewById(R.id.img_thumbnail)
-            val tvFileName: TextView = view.findViewById(R.id.tv_file_name)
-            val tvSubtext: TextView = view.findViewById(R.id.tv_subtext)
-
-            // To make this checkable, make sure you add a CheckBox element
-            // inside your layout resource item file (R.layout.item_file) with this ID.
-            val checkBox: CheckBox? = view.findViewById(R.id.checkbox_select)
-        }
-
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
-            val view = LayoutInflater.from(parent.context).inflate(R.layout.item_file, parent, false)
-            return FileViewHolder(view)
-        }
-
-        override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
-            val file = files[position]
-            holder.tvFileName.text = file.name
-
-            // Manage Checkbox Visibility States based on selection mode
-            if (isSelectionMode) {
-                holder.checkBox?.visibility = View.VISIBLE
-                holder.checkBox?.isChecked = selectedFiles.contains(file)
-            } else {
-                holder.checkBox?.visibility = View.GONE
+    private fun showBulkDeleteConfirmation(selected: List<DocumentFile>, onDeleted: () -> Unit) {
+        AlertDialog.Builder(this)
+            .setTitle("Delete Items")
+            .setMessage("Delete ${selected.size} items?")
+            .setPositiveButton("Delete") { _, _ ->
+                selected.forEach { it.delete() }
+                onDeleted()
             }
-
-            if (file.isDirectory) {
-                val itemCount = file.listFiles().size
-                holder.tvSubtext.text = "$itemCount items"
-                holder.imgThumbnail.setImageResource(android.R.drawable.ic_menu_gallery)
-            } else {
-                holder.tvSubtext.text = "${file.length() / 1024} KB"
-                try {
-                    contentResolver.openInputStream(file.uri).use { stream ->
-                        val bitmap = BitmapFactory.decodeStream(stream)
-                        if (bitmap != null) holder.imgThumbnail.setImageBitmap(bitmap)
-                        else holder.imgThumbnail.setImageResource(android.R.drawable.ic_menu_report_image)
-                    }
-                } catch (e: Exception) {
-                    holder.imgThumbnail.setImageResource(android.R.drawable.ic_menu_report_image)
-                }
-            }
-
-            // Click action logic
-            holder.itemView.setOnClickListener {
-                if (isSelectionMode) {
-                    toggleSelection(file, position)
-                } else {
-                    if (file.isDirectory) openDirectory(file)
-                }
-            }
-
-            // Long click action logic
-            holder.itemView.setOnLongClickListener {
-                if (!isSelectionMode) {
-                    // Pass BOTH file and position to fix the unresolved reference
-                    showSingleOptionsDialog(file, position)
-                } else {
-                    // If already in selection mode, a long click toggles selection normally
-                    toggleSelection(file, position)
-                }
-                true
-            }
-
-            holder.checkBox?.setOnClickListener {
-                toggleSelection(file, position)
-            }
-
-        }
-
-
-        fun toggleSelection(file: DocumentFile, position: Int) {
-            if (selectedFiles.contains(file)) {
-                selectedFiles.remove(file)
-            } else {
-                selectedFiles.add(file)
-            }
-            notifyItemChanged(position)
-
-            // Auto-exit mode if the user unchecks everything manually
-            if (selectedFiles.isEmpty()) {
-                exitSelectionMode()
-            }
-        }
-
-        override fun getItemCount(): Int = files.size
+            .setNegativeButton("Cancel", null)
+            .show()
     }
-
 }
