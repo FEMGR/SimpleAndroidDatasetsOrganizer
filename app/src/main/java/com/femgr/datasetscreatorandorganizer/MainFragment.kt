@@ -12,6 +12,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +27,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
@@ -252,7 +254,11 @@ class MainFragment : Fragment() {
         onBrowseFolder: () -> Unit
     ) {
         var labelInput by remember { mutableStateOf("") }
+        var isFocused by remember { mutableStateOf(false) }
         val filteredLabels = existingLabels.filter { it.contains(labelInput, ignoreCase = true) }
+        
+        // Show suggestions list only when there's input or the field has focus
+        val showSuggestions = labelInput.isNotEmpty() || isFocused
 
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -263,39 +269,47 @@ class MainFragment : Fragment() {
                         value = labelInput,
                         onValueChange = { labelInput = it },
                         label = { Text("Search or Enter New Label") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { isFocused = it.isFocused },
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Default.Search, null) }
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text("Existing Labels (from all folders):", style = MaterialTheme.typography.labelMedium)
-                    
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 200.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        if (filteredLabels.isNotEmpty()) {
-                            LazyColumn {
-                                items(filteredLabels) { label ->
-                                    Text(
-                                        text = label,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { labelInput = label }
-                                            .padding(12.dp),
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), thickness = 0.5.dp)
+                    AnimatedVisibility(visible = showSuggestions) {
+                        Column {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Existing Labels:", style = MaterialTheme.typography.labelMedium)
+                            
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                if (filteredLabels.isNotEmpty()) {
+                                    LazyColumn {
+                                        items(filteredLabels) { label ->
+                                            Text(
+                                                text = label,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { 
+                                                        labelInput = label 
+                                                        // Optionally clear focus or keep it
+                                                    }
+                                                    .padding(12.dp),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), thickness = 0.5.dp)
+                                        }
+                                    }
+                                } else if (labelInput.isNotEmpty()) {
+                                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        Text("No matches found", style = MaterialTheme.typography.bodySmall)
+                                    }
                                 }
-                            }
-                        } else {
-                            Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                                Text("No labels found", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -385,9 +399,9 @@ class MainFragment : Fragment() {
 
                     if (!useDefaultProportions) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextField(value = trainPct, onValueChange = { trainPct = it.filter { it.isDigit() } }, label = { Text("Tr %") }, modifier = Modifier.weight(1f), singleLine = true)
-                            TextField(value = valPct, onValueChange = { valPct = it.filter { it.isDigit() } }, label = { Text("Val %") }, modifier = Modifier.weight(1f), singleLine = true)
-                            TextField(value = testPct, onValueChange = { testPct = it.filter { it.isDigit() } }, label = { Text("Te %") }, modifier = Modifier.weight(1f), singleLine = true)
+                            TextField(value = trainPct, onValueChange = { trainPct = it.filter { c -> c.isDigit() } }, label = { Text("Tr %") }, modifier = Modifier.weight(1f), singleLine = true)
+                            TextField(value = valPct, onValueChange = { valPct = it.filter { c -> c.isDigit() } }, label = { Text("Val %") }, modifier = Modifier.weight(1f), singleLine = true)
+                            TextField(value = testPct, onValueChange = { testPct = it.filter { c -> c.isDigit() } }, label = { Text("Te %") }, modifier = Modifier.weight(1f), singleLine = true)
                         }
                         val total = (trainPct.toIntOrNull() ?: 0) + (valPct.toIntOrNull() ?: 0) + (testPct.toIntOrNull() ?: 0)
                         if (total != 100) {
@@ -448,7 +462,7 @@ class MainFragment : Fragment() {
 
     private fun processCapturedImage(context: Context, tempFile: File, baseUri: Uri, label: String) {
         try {
-            // Landing zone is now /train
+            // Updated to use datasets/train as the base landing zone
             val labelDir = DatasetManager.getLabelDirectory(context, baseUri, DatasetManager.FOLDER_TRAIN, label)
             val finalFile = DatasetManager.getNextFile(context, labelDir, "jpg", "image/jpeg")
 
@@ -458,7 +472,7 @@ class MainFragment : Fragment() {
                 }
             }
             tempFile.delete()
-            Toast.makeText(context, "Saved to train/$label", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Saved image for: $label", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(context, "Save error: ${e.message}", Toast.LENGTH_LONG).show()
         }

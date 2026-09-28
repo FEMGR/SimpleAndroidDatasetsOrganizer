@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,6 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -85,7 +87,6 @@ class MainActivity : ComponentActivity() {
                 sharedPrefs.edit().putString("base_folder_uri", uri.toString()).apply()
                 baseDirectoryUri = uri
                 DatasetManager.initializeBaseFolders(context, uri)
-                // Refresh labels after selection
                 existingLabels = DatasetManager.getExistingLabels(context, uri)
                 Toast.makeText(context, "Dataset folder selected!", Toast.LENGTH_SHORT).show()
             }
@@ -96,7 +97,6 @@ class MainActivity : ComponentActivity() {
         ) { success ->
             if (success && tempImageFile != null && baseDirectoryUri != null) {
                 processCapturedImage(context, tempImageFile!!, baseDirectoryUri!!, currentLabel)
-                // Refresh labels in case a new one was created
                 existingLabels = DatasetManager.getExistingLabels(context, baseDirectoryUri!!)
             } else {
                 tempImageFile?.delete()
@@ -108,7 +108,7 @@ class MainActivity : ComponentActivity() {
             ActivityResultContracts.RequestPermission()
         ) { isGranted ->
             if (isGranted) {
-                Toast.makeText(context, "Permission granted! Tap Capture again.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Permission granted! Tap Confirm again.", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -232,6 +232,7 @@ class MainActivity : ComponentActivity() {
         // Split Dataset Dialog
         if (showSplitDialog) {
             SplitDatasetDialog(
+                baseUri = baseDirectoryUri!!,
                 labels = existingLabels,
                 onDismiss = { showSplitDialog = false },
                 onSplit = { selectedLabels, train, valPct, test ->
@@ -251,7 +252,11 @@ class MainActivity : ComponentActivity() {
         onBrowseFolder: () -> Unit
     ) {
         var labelInput by remember { mutableStateOf("") }
+        var isFocused by remember { mutableStateOf(false) }
         val filteredLabels = existingLabels.filter { it.contains(labelInput, ignoreCase = true) }
+        
+        // Show list only when search field is focused or has text
+        val showSuggestions = labelInput.isNotEmpty() || isFocused
 
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -262,44 +267,49 @@ class MainActivity : ComponentActivity() {
                         value = labelInput,
                         onValueChange = { labelInput = it },
                         label = { Text("Search or Enter New Label") },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged { isFocused = it.isFocused },
                         singleLine = true,
                         leadingIcon = { Icon(Icons.Default.Search, null) }
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text("Found Labels:", style = MaterialTheme.typography.labelMedium)
-                    
-                    Surface(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 180.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        if (filteredLabels.isNotEmpty()) {
-                            LazyColumn {
-                                items(filteredLabels) { label ->
-                                    Text(
-                                        text = label,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable { labelInput = label }
-                                            .padding(12.dp),
-                                        style = MaterialTheme.typography.bodyMedium
-                                    )
-                                    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), thickness = 0.5.dp)
+                    AnimatedVisibility(visible = showSuggestions) {
+                        Column {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Existing Labels:", style = MaterialTheme.typography.labelMedium)
+                            
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp),
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ) {
+                                if (filteredLabels.isNotEmpty()) {
+                                    LazyColumn {
+                                        items(filteredLabels) { label ->
+                                            Text(
+                                                text = label,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { labelInput = label }
+                                                    .padding(12.dp),
+                                                style = MaterialTheme.typography.bodyMedium
+                                            )
+                                            HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), thickness = 0.5.dp)
+                                        }
+                                    }
+                                } else if (labelInput.isNotEmpty()) {
+                                    Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        Text("No matches found", style = MaterialTheme.typography.bodySmall)
+                                    }
                                 }
-                            }
-                        } else {
-                            Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
-                                Text("No labels found", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     
                     TextButton(
                         onClick = onBrowseFolder,
@@ -316,7 +326,7 @@ class MainActivity : ComponentActivity() {
                     enabled = labelInput.isNotBlank(),
                     onClick = { onConfirm(labelInput.trim()) }
                 ) {
-                    Text("Capture")
+                    Text("Confirm")
                 }
             },
             dismissButton = {
@@ -329,17 +339,19 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     fun SplitDatasetDialog(
+        baseUri: Uri,
         labels: List<String>,
         onDismiss: () -> Unit,
         onSplit: (Set<String>, Int, Int, Int) -> Unit
+
     ) {
-        val context = LocalContext.current
         var selectedLabels by remember { mutableStateOf(labels.toSet()) }
         var useDefaultProportions by remember { mutableStateOf(true) }
         var trainPct by remember { mutableStateOf("70") }
         var valPct by remember { mutableStateOf("15") }
         var testPct by remember { mutableStateOf("15") }
-        
+        val context = LocalContext.current
+
         AlertDialog(
             onDismissRequest = onDismiss,
             title = { Text("Split Dataset Settings") },
@@ -397,23 +409,21 @@ class MainActivity : ComponentActivity() {
                             TextField(
                                 value = trainPct,
                                 onValueChange = { trainPct = it.filter { c -> c.isDigit() } },
-                                label = { Text("Train") },
+                                label = { Text("Tr %") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
                             TextField(
                                 value = valPct,
                                 onValueChange = { valPct = it.filter { c -> c.isDigit() } },
-                                label = { Text("Val") },
+                                label = { Text("Val %") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
                             TextField(
                                 value = testPct,
                                 onValueChange = { testPct = it.filter { c -> c.isDigit() } },
-                                label = { Text("Test") },
+                                label = { Text("Te %") },
                                 modifier = Modifier.weight(1f),
                                 singleLine = true
                             )
@@ -438,10 +448,12 @@ class MainActivity : ComponentActivity() {
                         val v = if (useDefaultProportions) 15 else valPct.toIntOrNull() ?: 15
                         val te = if (useDefaultProportions) 15 else testPct.toIntOrNull() ?: 15
                         
-                        if (selectedLabels.isNotEmpty() && (t + v + te == 100)) {
-                            onSplit(selectedLabels, t, v, te)
+                        if (selectedLabels.isEmpty()) {
+                            Toast.makeText(context, "Select at least one label", Toast.LENGTH_SHORT).show()
+                        } else if (t + v + te != 100) {
+                            Toast.makeText(context, "Total must be 100%", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Invalid settings", Toast.LENGTH_SHORT).show()
+                            onSplit(selectedLabels, t, v, te)
                         }
                     }
                 ) {
@@ -473,6 +485,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun checkPermissionAndLaunch(
+        context: Context,
+        launcher: androidx.activity.result.ActivityResultLauncher<String>,
+        onGranted: () -> Unit
+    ) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            onGranted()
+        } else {
+            launcher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     private fun launchCamera(
         context: Context,
         launcher: androidx.activity.result.ActivityResultLauncher<Uri>
@@ -490,7 +514,7 @@ class MainActivity : ComponentActivity() {
 
     private fun processCapturedImage(context: Context, tempFile: File, baseUri: Uri, label: String) {
         try {
-            // Landing zone is now /train
+            // Updated to use datasets/train as the base landing zone
             val labelDir = DatasetManager.getLabelDirectory(context, baseUri, DatasetManager.FOLDER_TRAIN, label)
             val finalFile = DatasetManager.getNextFile(context, labelDir, "jpg", "image/jpeg")
 
@@ -500,7 +524,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             tempFile.delete()
-            Toast.makeText(context, "Saved to train/$label", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Saved image for: $label", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(context, "Save error: ${e.message}", Toast.LENGTH_LONG).show()
         }
